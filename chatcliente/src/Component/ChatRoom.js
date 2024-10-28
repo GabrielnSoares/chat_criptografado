@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
+import { enc, dec } from './crypt';
 
 var stompClient = null;
 const ChatRoom = () => {
@@ -53,6 +54,8 @@ const ChatRoom = () => {
                 }
                 break;
             case "MESSAGE":
+                let msg = dec(payloadData.senderName, payloadData.message)
+                payloadData.message = msg
                 publicChats.push(payloadData);
                 setPublicChats([...publicChats]);
                 break;
@@ -62,6 +65,8 @@ const ChatRoom = () => {
     const onPrivateMessage = (payload) => {
         console.log(payload);
         var payloadData = JSON.parse(payload.body);
+        let msg = dec(payloadData.senderName, payloadData.message)
+        payloadData.message = msg
         if (privateChats.get(payloadData.senderName)) {
             privateChats.get(payloadData.senderName).push(payloadData);
             setPrivateChats(new Map(privateChats));
@@ -86,7 +91,7 @@ const ChatRoom = () => {
         if (stompClient && stompClient.connected) {
             var chatMessage = {
                 senderName: userData.username,
-                message: userData.message,
+                message: enc(userData.username, userData.message).toString(),
                 status: "MESSAGE"
             };
             console.log(chatMessage);
@@ -100,15 +105,16 @@ const ChatRoom = () => {
             var chatMessage = {
                 senderName: userData.username,
                 receiverName: tab,
-                message: userData.message,
+                message: enc(userData.username, userData.message).toString(),
                 status: "MESSAGE"
             };
 
+            stompClient.publish({ destination: "/app/private-message", body: JSON.stringify(chatMessage) });
             if (userData.username !== tab) {
+                chatMessage.message = dec(userData.username, chatMessage.message)
                 privateChats.get(tab).push(chatMessage);
                 setPrivateChats(new Map(privateChats));
             }
-            stompClient.publish({ destination: "/app/private-message", body: JSON.stringify(chatMessage) });
             setUserData({ ...userData, "message": "" });
         }
     }
