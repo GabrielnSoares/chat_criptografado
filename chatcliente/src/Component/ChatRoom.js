@@ -14,6 +14,7 @@ const ChatRoom = () => {
         connected: false,
         message: ''
     });
+    const [blinkingTabs, setBlinkingTabs] = useState(new Set());
 
     useEffect(() => {
         console.log(userData);
@@ -51,6 +52,9 @@ const ChatRoom = () => {
                 if (!privateChats.get(payloadData.senderName)) {
                     privateChats.set(payloadData.senderName, []);
                     setPrivateChats(new Map(privateChats));
+                    if (userData.username !== payloadData.senderName) {
+                        userJoin();
+                    }
                 }
                 break;
             case "MESSAGE":
@@ -76,6 +80,9 @@ const ChatRoom = () => {
             privateChats.set(payloadData.senderName, list);
             setPrivateChats(new Map(privateChats));
         }
+        if (payloadData.senderName !== userData.username && tab !== payloadData.senderName) {
+            setBlinkingTabs(prev => new Set(prev).add(payloadData.senderName));
+        }
     }
 
     const onError = (err) => {
@@ -92,7 +99,8 @@ const ChatRoom = () => {
             var chatMessage = {
                 senderName: userData.username,
                 message: enc(userData.username, userData.message).toString(),
-                status: "MESSAGE"
+                status: "MESSAGE",
+                timestamp: new Date().getTime()
             };
             console.log(chatMessage);
             stompClient.publish({ destination: "/app/message", body: JSON.stringify(chatMessage) });
@@ -106,7 +114,8 @@ const ChatRoom = () => {
                 senderName: userData.username,
                 receiverName: tab,
                 message: enc(userData.username, userData.message).toString(),
-                status: "MESSAGE"
+                status: "MESSAGE",
+                timestamp: new Date().getTime()
             };
 
             stompClient.publish({ destination: "/app/private-message", body: JSON.stringify(chatMessage) });
@@ -128,64 +137,192 @@ const ChatRoom = () => {
         connect();
     }
 
+    const handleSubmit = (event) => {
+        event.preventDefault();
+        if (tab === "CHATROOM") {
+            sendValue();
+        } else {
+            sendPrivateValue();
+        }
+    };
+
+    const handleTabClick = (name) => {
+        setTab(name);
+        setBlinkingTabs(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(name);
+            return newSet;
+        });
+    }
+
+    const handleLogout = () => {
+        window.location.reload();
+    }
+
+    const handleRegisterSubmit = (event) => {
+        event.preventDefault();
+        registerUser();
+    };
+
     return (
         <div className="container">
             {userData.connected ?
                 <div className="chat-box">
                     <div className="member-list">
+                        <div className="logo-container">
+                            <img 
+                                src="/logo-chat.png" 
+                                alt="Logo Chat" 
+                                className="chat-logo"
+                            />
+                            <span className="logo-text">ZapTalk!</span>
+                        </div>
                         <ul>
-                            <li onClick={() => { setTab("CHATROOM") }} className={`member ${tab === "CHATROOM" && "active"}`}>Chatroom</li>
-                            {[...privateChats.keys()].map((name, index) => (
-                                <li onClick={() => { setTab(name) }} className={`member ${tab === name && "active"}`} key={index}>{name}</li>
-                            ))}
+                            {[...privateChats.keys()]
+                                .filter(name => name === userData.username)
+                                .map((name, index) => (
+                                    <li onClick={() => { setTab(name) }} 
+                                        className={`member current-user ${tab === name && "active"}`} 
+                                        key={index}>
+                                        {name} (Você)
+                                    </li>
+                                ))}
+                            <li onClick={() => { setTab("CHATROOM") }} 
+                                className={`member ${tab === "CHATROOM" && "active"}`}>
+                                ChatRoom (Todos)
+                            </li>
+                            {[...privateChats.keys()]
+                                .filter(name => name !== userData.username)
+                                .map((name, index) => (
+                                    <li 
+                                        onClick={() => handleTabClick(name)} 
+                                        className={`member ${tab === name && "active"} ${blinkingTabs.has(name) ? "blinking" : ""}`} 
+                                        key={index}
+                                    >
+                                        {name}
+                                    </li>
+                                ))}
                         </ul>
+                        <button 
+                            className="logout-button" 
+                            onClick={handleLogout}
+                        >
+                            Sair
+                        </button>
                     </div>
                     {tab === "CHATROOM" && <div className="chat-content">
+                        <div className="chat-header">
+                            <span className="active-chat-name">Chat Público</span>
+                        </div>
                         <ul className="chat-messages">
                             {publicChats.map((chat, index) => (
                                 <li className={`message ${chat.senderName === userData.username && "self"}`} key={index}>
-                                    {chat.senderName !== userData.username && <div className="avatar">{chat.senderName}</div>}
+                                    {chat.senderName !== userData.username && (
+                                        <div className="avatar-container">
+                                            <div className="avatar">{chat.senderName}</div>
+                                            <div className="message-time">
+                                                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="message-data">{chat.message}</div>
-                                    {chat.senderName === userData.username && <div className="avatar self">{chat.senderName}</div>}
+                                    {chat.senderName === userData.username && (
+                                        <div className="avatar-container self">
+                                            <div className="avatar self">{chat.senderName}</div>
+                                            <div className="message-time">
+                                                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </li>
                             ))}
                         </ul>
 
-                        <div className="send-message">
-                            <input type="text" className="input-message" placeholder="Digite sua mensagem" value={userData.message} onChange={handleMessage} />
-                            <button type="button" className="send-button" onClick={sendValue}>Enviar</button>
-                        </div>
+                        <form onSubmit={handleSubmit} className="send-message">
+                            <input 
+                                type="text" 
+                                className="input-message" 
+                                placeholder="Digite sua mensagem" 
+                                value={userData.message} 
+                                onChange={handleMessage}
+                            />
+                            <button 
+                                type="submit" 
+                                className="send-button"
+                            >
+                                Enviar
+                            </button>
+                        </form>
                     </div>}
                     {tab !== "CHATROOM" && <div className="chat-content">
+                        <div className="chat-header">
+                            <span className="active-chat-name">Chat com {tab}</span>
+                        </div>
                         <ul className="chat-messages">
                             {[...privateChats.get(tab)].map((chat, index) => (
                                 <li className={`message ${chat.senderName === userData.username && "self"}`} key={index}>
-                                    {chat.senderName !== userData.username && <div className="avatar">{chat.senderName}</div>}
+                                    {chat.senderName !== userData.username && (
+                                        <div className="avatar-container">
+                                            <div className="avatar">{chat.senderName}</div>
+                                            <div className="message-time">
+                                                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="message-data">{chat.message}</div>
-                                    {chat.senderName === userData.username && <div className="avatar self">{chat.senderName}</div>}
+                                    {chat.senderName === userData.username && (
+                                        <div className="avatar-container self">
+                                            <div className="avatar self">{chat.senderName}</div>
+                                            <div className="message-time">
+                                                {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </li>
                             ))}
                         </ul>
 
-                        <div className="send-message">
-                            <input type="text" className="input-message" placeholder="Digite sua mensagem" value={userData.message} onChange={handleMessage} />
-                            <button type="button" className="send-button" onClick={sendPrivateValue}>Enviar</button>
-                        </div>
+                        <form onSubmit={handleSubmit} className="send-message">
+                            <input 
+                                type="text" 
+                                className="input-message" 
+                                placeholder="Digite sua mensagem" 
+                                value={userData.message} 
+                                onChange={handleMessage}
+                            />
+                            <button 
+                                type="submit" 
+                                className="send-button"
+                            >
+                                Enviar
+                            </button>
+                        </form>
                     </div>}
                 </div>
                 :
                 <div className="register">
-                    <input
-                        id="user-name"
-                        placeholder="Digite seu nome"
-                        name="userName"
-                        value={userData.username}
-                        onChange={handleUsername}
-                        margin="normal"
-                    />
-                    <button type="button" onClick={registerUser}>
-                        Conectar
-                    </button>
+                    <div className="register-content">
+                        <img 
+                            src="/logo-chat.png" 
+                            alt="Logo Chat" 
+                            className="register-logo"
+                        />
+                        <h2 className="welcome-text">Bem-vindo ao ZapTalk!</h2>
+                        <p className="welcome-subtitle">Por favor, digite seu nome para começar</p>
+                        <form onSubmit={handleRegisterSubmit}>
+                            <input
+                                id="user-name"
+                                placeholder="Seu nome"
+                                name="userName"
+                                value={userData.username}
+                                onChange={handleUsername}
+                                margin="normal"
+                            />
+                            <button type="submit">
+                                Conectar
+                            </button>
+                        </form>
+                    </div>
                 </div>}
         </div>
     )

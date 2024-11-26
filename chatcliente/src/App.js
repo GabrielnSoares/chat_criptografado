@@ -5,7 +5,7 @@ const App = () => {
   return (
     <div>
       <header>
-        <h1>Sistema Criptografado</h1>
+        <h1></h1>
       </header>
       <ChatRoom />
     </div>
