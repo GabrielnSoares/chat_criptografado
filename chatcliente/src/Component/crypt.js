@@ -47,10 +47,11 @@ function chave(nome) {
   let md5 = MD5(nome).toString()
   md5 = md5.match(/.{2}/g)
   assert(md5.length === 16, md5)
-  md5.forEach((ele) => {assert(ele.length === 2, "2"); ele = parseInt(ele, 16)})
-  let matriz = []
-  for (let i=0; i < md5.length; i += 4) {
-    matriz.push(md5.slice(i, i+4))
+  let matriz = [[], [], [], []]
+  for (let i=0; i < 4; i++) {
+    for (let j=0; j < 4; j++) {
+        matriz[i].push(parseInt(md5[i * 4 + j], 16))
+    }
   }
   return det(matriz)
 }
